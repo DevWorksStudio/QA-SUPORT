@@ -2,85 +2,60 @@ import express from "express";
 import { GoogleGenAI } from "@google/genai";
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+function parseBase64ToGeminiPart(base64DataUri: string) {
+  const matches = base64DataUri.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+  if (!matches || matches.length !== 3) {
+    return { inlineData: { data: base64DataUri, mimeType: "image/png" } };
+  }
+  return { inlineData: { data: matches[2], mimeType: matches[1] } };
+}
+
 app.post("/api/audit", async (req, res) => {
   try {
-    const { whatsappChat, jiraTicket } = req.body;
+    const { whatsappChat, jiraTicket, whatsappImage, jiraImage } = req.body;
 
-    if (!whatsappChat || !jiraTicket) {
-      return res.status(400).json({ error: "Missing whatsappChat or jiraTicket data." });
+    if (!whatsappChat && !whatsappImage) {
+      return res.status(400).json({ error: "Forneça o texto ou o print do WhatsApp." });
+    }
+    if (!jiraTicket && !jiraImage) {
+      return res.status(400).json({ error: "Forneça o texto ou o print do JIRA." });
     }
 
-    const prompt = `
-Atue como um Especialista Sênior de QA (Garantia da Qualidade) e Auditoria de Suporte.
+    let promptTexto = `Atue como um Especialista Sênior de QA e Auditoria de Suporte. Audite o atendimento cruzando a conversa com o ticket.\n\n`;
+    const contents: any[] = [];
 
-Seu objetivo é auditar o atendimento ao cliente, garantindo que a execução real do suporte condiga com os processos internos da empresa. Você deve cruzar a transcrição bruta do atendimento com o registro oficial documentado no sistema JIRA.
+    if (whatsappChat) promptTexto += `--- [CONVERSA DO WHATSAPP - TEXTO] ---\n${whatsappChat}\n\n`;
+    if (whatsappImage) promptTexto += `--- [CONVERSA DO WHATSAPP - IMAGEM] ---\nO print da conversa está anexado.\n\n`;
+    if (jiraTicket) promptTexto += `--- [TICKET DO JIRA - TEXTO] ---\n${jiraTicket}\n\n`;
+    if (jiraImage) promptTexto += `--- [TICKET DO JIRA - IMAGEM] ---\nO print do ticket está anexado.\n\n`;
 
-Aqui estão os dados:
---- WhatsApp Chat / Transcrição ---
-${whatsappChat}
-
---- JIRA Ticket / Registro ---
-${jiraTicket}
-
-Realize a auditoria baseada nos três critérios abaixo e retorne estritamente um objeto JSON com os resultados, sem formatações Markdown ao redor do JSON ou textos adicionais:
-
-1. Cruzamento de Dados (Conformidade)
-* O teor, o problema raiz e a solução aplicados na conversa do WhatsApp estão fielmente refletidos no ticket do JIRA?
-* Identifique se houve omissão de informações críticas ou se o analista registrou algo diferente do que realmente aconteceu na conversa.
-
-2. Resolução e Qualidade Técnica
-* O analista seguiu um fluxo lógico de troubleshooting?
-* Ele respondeu a todas as dúvidas levantadas pelo cliente ou ignorou alguma pergunta secundária?
-* A solução aplicada realmente resolve o problema apontado ou o fechamento do ticket foi prematuro?
-
-3. Soft Skills e Postura
-* Analise a cordialidade, a empatia e a clareza da comunicação.
-* O atendimento seguiu um padrão profissional de postura desde a saudação inicial até o encerramento da conversa?
-
-Formato de Saída Obrigatório (JSON Estrito):
+    promptTexto += `Retorne estritamente um JSON com:
 {
-  "dataCrossReference": {
-    "isCompliant": true,
-    "divergencesFound": "Descreva de forma direta as divergências entre o WhatsApp e o JIRA, ou escreva 'Nenhuma divergência' se estiver conforme."
-  },
-  "technicalQuality": {
-    "isResolved": true,
-    "unansweredQuestions": "Liste perguntas do cliente que foram ignoradas, ou escreva 'Nenhuma'.",
-    "observation": "Análise técnica sobre o fluxo de resolução adotado pelo analista."
-  },
-  "softSkills": {
-    "score": 0,
-    "postureAnalysis": "Avaliação sobre a cordialidade, empatia e profissionalismo."
-  },
-  "overallFeedback": "Um parágrafo curto e direto com o feedback final para o analista de suporte."
-}
-    `.trim();
+  "dataCrossReference": { "isCompliant": true, "divergencesFound": "..." },
+  "technicalQuality": { "isResolved": true, "unansweredQuestions": "...", "observation": "..." },
+  "softSkills": { "score": 0, "postureAnalysis": "..." },
+  "overallFeedback": "..."
+}`;
+
+    contents.push(promptTexto);
+    if (whatsappImage) contents.push(parseBase64ToGeminiPart(whatsappImage));
+    if (jiraImage) contents.push(parseBase64ToGeminiPart(jiraImage));
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        temperature: 0.2
-      }
+      contents: contents,
+      config: { responseMimeType: "application/json", temperature: 0.2 }
     });
 
-    const jsonText = response.text;
-    if (!jsonText) {
-      throw new Error("Empty response from AI");
-    }
-    
-    const auditResult = JSON.parse(jsonText);
-    res.json(auditResult);
+    res.json(JSON.parse(response.text || "{}"));
   } catch (error: any) {
     console.error("Audit API Error:", error);
-    res.status(500).json({ error: error.message || "Failed to generate audit report" });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Essa é a linha mágica que faz o Express funcionar na Vercel
 export default app;
