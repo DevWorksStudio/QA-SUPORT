@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ClipboardCheck, FileText, MessageSquare, AlertCircle, CheckCircle2, ChevronRight, RefreshCw } from 'lucide-react';
+import { ClipboardCheck, FileText, MessageSquare, AlertCircle, CheckCircle2, ChevronRight, RefreshCw, Upload, Image as ImageIcon, X } from 'lucide-react';
 
 interface AuditResult {
   dataCrossReference: {
@@ -21,13 +21,26 @@ interface AuditResult {
 export default function App() {
   const [whatsappChat, setWhatsappChat] = useState('');
   const [jiraTicket, setJiraTicket] = useState('');
+  
+  const [whatsappImage, setWhatsappImage] = useState('');
+  const [jiraImage, setJiraImage] = useState('');
+  
   const [isAuditing, setIsAuditing] = useState(false);
   const [result, setResult] = useState<AuditResult | null>(null);
   const [error, setError] = useState('');
 
+  const handleImageUpload = (file: File, setter: (val: string) => void) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setter(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleAudit = async () => {
-    if (!whatsappChat.trim() || !jiraTicket.trim()) {
-      setError('Por favor, preencha a transcrição do WhatsApp e o ticket do JIRA.');
+    if ((!whatsappChat.trim() && !whatsappImage) || (!jiraTicket.trim() && !jiraImage)) {
+      setError('Por favor, forneça o texto ou print do WhatsApp E também do JIRA.');
       return;
     }
 
@@ -39,7 +52,12 @@ export default function App() {
       const response = await fetch('/api/audit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ whatsappChat, jiraTicket }),
+        body: JSON.stringify({ 
+          whatsappChat, 
+          jiraTicket,
+          whatsappImage,
+          jiraImage
+        }),
       });
 
       if (!response.ok) {
@@ -78,10 +96,38 @@ export default function App() {
           {/* Input Section */}
           <div className="space-y-4 bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm p-4">
             <div>
-              <label className="flex items-center space-x-2 text-[11px] font-bold text-slate-500 uppercase mb-2">
-                <MessageSquare className="w-3 h-3 text-emerald-500" />
-                <span>Transcrição do WhatsApp</span>
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="flex items-center space-x-2 text-[11px] font-bold text-slate-500 uppercase">
+                  <MessageSquare className="w-3 h-3 text-emerald-500" />
+                  <span>Transcrição do WhatsApp</span>
+                </label>
+                <label className="cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 text-[11px] font-semibold py-1 px-3 rounded flex items-center gap-1.5 transition-colors">
+                  <Upload className="w-3 h-3" />
+                  <span>Anexar Print</span>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        handleImageUpload(e.target.files[0], setWhatsappImage);
+                      }
+                    }} 
+                  />
+                </label>
+              </div>
+              
+              {whatsappImage && (
+                <div className="mb-3 relative w-32 h-32 rounded-lg border border-slate-200 overflow-hidden group">
+                  <img src={whatsappImage} alt="WhatsApp Preview" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                     <button onClick={() => setWhatsappImage('')} className="bg-white text-slate-800 p-1.5 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors">
+                       <X className="w-4 h-4" />
+                     </button>
+                  </div>
+                </div>
+              )}
+
               <textarea
                 value={whatsappChat}
                 onChange={(e) => setWhatsappChat(e.target.value)}
@@ -91,10 +137,38 @@ export default function App() {
             </div>
 
             <div>
-               <label className="flex items-center space-x-2 text-[11px] font-bold text-slate-500 uppercase mb-2">
-                <FileText className="w-3 h-3 text-blue-500" />
-                <span>Ticket do JIRA</span>
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="flex items-center space-x-2 text-[11px] font-bold text-slate-500 uppercase">
+                  <FileText className="w-3 h-3 text-blue-500" />
+                  <span>Ticket do JIRA</span>
+                </label>
+                <label className="cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 text-[11px] font-semibold py-1 px-3 rounded flex items-center gap-1.5 transition-colors">
+                  <Upload className="w-3 h-3" />
+                  <span>Anexar Print</span>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        handleImageUpload(e.target.files[0], setJiraImage);
+                      }
+                    }} 
+                  />
+                </label>
+              </div>
+
+              {jiraImage && (
+                <div className="mb-3 relative w-32 h-32 rounded-lg border border-slate-200 overflow-hidden group">
+                  <img src={jiraImage} alt="Jira Preview" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                     <button onClick={() => setJiraImage('')} className="bg-white text-slate-800 p-1.5 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors">
+                       <X className="w-4 h-4" />
+                     </button>
+                  </div>
+                </div>
+              )}
+
               <textarea
                 value={jiraTicket}
                 onChange={(e) => setJiraTicket(e.target.value)}
