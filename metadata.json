@@ -1,0 +1,6 @@
+{
+  "name": "QA Support Auditor",
+  "description": "AI-powered internal auditing tool to compare WhatsApp chat logs with JIRA tickets for QA evaluation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
