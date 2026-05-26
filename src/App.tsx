@@ -22,24 +22,29 @@ export default function App() {
   const [whatsappChat, setWhatsappChat] = useState('');
   const [jiraTicket, setJiraTicket] = useState('');
   
-  const [whatsappImage, setWhatsappImage] = useState('');
-  const [jiraImage, setJiraImage] = useState('');
+  const [whatsappImages, setWhatsappImages] = useState<string[]>([]);
+  const [jiraImages, setJiraImages] = useState<string[]>([]);
   
   const [isAuditing, setIsAuditing] = useState(false);
   const [result, setResult] = useState<AuditResult | null>(null);
   const [error, setError] = useState('');
 
-  const handleImageUpload = (file: File, setter: (val: string) => void) => {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setter(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+  const handleMultipleImageUpload = async (files: FileList | null, setter: React.Dispatch<React.SetStateAction<string[]>>) => {
+    if (!files) return;
+    const newImages = await Promise.all(
+      Array.from(files).map((file) => {
+        return new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+      })
+    );
+    setter((prev) => [...prev, ...newImages]);
   };
 
   const handleAudit = async () => {
-    if ((!whatsappChat.trim() && !whatsappImage) || (!jiraTicket.trim() && !jiraImage)) {
+    if ((!whatsappChat.trim() && whatsappImages.length === 0) || (!jiraTicket.trim() && jiraImages.length === 0)) {
       setError('Por favor, forneça o texto ou print do WhatsApp E também do JIRA.');
       return;
     }
@@ -55,8 +60,8 @@ export default function App() {
         body: JSON.stringify({ 
           whatsappChat, 
           jiraTicket,
-          whatsappImage,
-          jiraImage
+          whatsappImages,
+          jiraImages
         }),
       });
 
@@ -103,28 +108,32 @@ export default function App() {
                 </label>
                 <label className="cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 text-[11px] font-semibold py-1 px-3 rounded flex items-center gap-1.5 transition-colors">
                   <Upload className="w-3 h-3" />
-                  <span>Anexar Print</span>
+                  <span>Anexar Prints ({whatsappImages.length})</span>
                   <input 
                     type="file" 
-                    accept="image/*" 
+                    accept="image/*"
+                    multiple
                     className="hidden" 
                     onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        handleImageUpload(e.target.files[0], setWhatsappImage);
-                      }
+                      handleMultipleImageUpload(e.target.files, setWhatsappImages);
+                      e.target.value = '';
                     }} 
                   />
                 </label>
               </div>
               
-              {whatsappImage && (
-                <div className="mb-3 relative w-32 h-32 rounded-lg border border-slate-200 overflow-hidden group">
-                  <img src={whatsappImage} alt="WhatsApp Preview" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                     <button onClick={() => setWhatsappImage('')} className="bg-white text-slate-800 p-1.5 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors">
-                       <X className="w-4 h-4" />
-                     </button>
-                  </div>
+              {whatsappImages.length > 0 && (
+                <div className="mb-3 flex gap-2 overflow-x-auto pb-2">
+                  {whatsappImages.map((img, idx) => (
+                    <div key={idx} className="relative w-20 h-20 shrink-0 rounded border border-slate-200 overflow-hidden group">
+                      <img src={img} alt={`WhatsApp Preview ${idx + 1}`} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                         <button onClick={() => setWhatsappImages(prev => prev.filter((_, i) => i !== idx))} className="bg-white text-slate-800 p-1.5 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors">
+                           <X className="w-4 h-4" />
+                         </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
 
@@ -144,28 +153,32 @@ export default function App() {
                 </label>
                 <label className="cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 text-[11px] font-semibold py-1 px-3 rounded flex items-center gap-1.5 transition-colors">
                   <Upload className="w-3 h-3" />
-                  <span>Anexar Print</span>
+                  <span>Anexar Prints ({jiraImages.length})</span>
                   <input 
                     type="file" 
-                    accept="image/*" 
+                    accept="image/*"
+                    multiple
                     className="hidden" 
                     onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        handleImageUpload(e.target.files[0], setJiraImage);
-                      }
+                      handleMultipleImageUpload(e.target.files, setJiraImages);
+                      e.target.value = '';
                     }} 
                   />
                 </label>
               </div>
 
-              {jiraImage && (
-                <div className="mb-3 relative w-32 h-32 rounded-lg border border-slate-200 overflow-hidden group">
-                  <img src={jiraImage} alt="Jira Preview" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                     <button onClick={() => setJiraImage('')} className="bg-white text-slate-800 p-1.5 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors">
-                       <X className="w-4 h-4" />
-                     </button>
-                  </div>
+              {jiraImages.length > 0 && (
+                <div className="mb-3 flex gap-2 overflow-x-auto pb-2">
+                  {jiraImages.map((img, idx) => (
+                    <div key={idx} className="relative w-20 h-20 shrink-0 rounded border border-slate-200 overflow-hidden group">
+                      <img src={img} alt={`Jira Preview ${idx + 1}`} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                         <button onClick={() => setJiraImages(prev => prev.filter((_, i) => i !== idx))} className="bg-white text-slate-800 p-1.5 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors">
+                           <X className="w-4 h-4" />
+                         </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
 
