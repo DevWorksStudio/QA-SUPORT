@@ -1,25 +1,20 @@
 import express from "express";
-import path from "path";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+
+const app = express();
+app.use(express.json());
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+app.post("/api/audit", async (req, res) => {
+  try {
+    const { whatsappChat, jiraTicket } = req.body;
 
-  app.use(express.json());
+    if (!whatsappChat || !jiraTicket) {
+      return res.status(400).json({ error: "Missing whatsappChat or jiraTicket data." });
+    }
 
-  app.post("/api/audit", async (req, res) => {
-    try {
-      const { whatsappChat, jiraTicket } = req.body;
-
-      if (!whatsappChat || !jiraTicket) {
-        return res.status(400).json({ error: "Missing whatsappChat or jiraTicket data." });
-      }
-
-      const prompt = `
+    const prompt = `
 Atue como um Especialista Sênior de QA (Garantia da Qualidade) e Auditoria de Suporte.
 
 Seu objetivo é auditar o atendimento ao cliente, garantindo que a execução real do suporte condiga com os processos internos da empresa. Você deve cruzar a transcrição bruta do atendimento com o registro oficial documentado no sistema JIRA.
@@ -58,53 +53,34 @@ Formato de Saída Obrigatório (JSON Estrito):
     "observation": "Análise técnica sobre o fluxo de resolução adotado pelo analista."
   },
   "softSkills": {
-    "score": 0, /* Score de 0 a 100 */
+    "score": 0,
     "postureAnalysis": "Avaliação sobre a cordialidade, empatia e profissionalismo."
   },
   "overallFeedback": "Um parágrafo curto e direto com o feedback final para o analista de suporte."
 }
-      `.trim();
+    `.trim();
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          temperature: 0.2
-        }
-      });
-
-      const jsonText = response.text;
-      if (!jsonText) {
-        throw new Error("Empty response from AI");
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        temperature: 0.2
       }
-      
-      const auditResult = JSON.parse(jsonText);
-      res.json(auditResult);
-    } catch (error: any) {
-      console.error("Audit API Error:", error);
-      res.status(500).json({ error: error.message || "Failed to generate audit report" });
+    });
+
+    const jsonText = response.text;
+    if (!jsonText) {
+      throw new Error("Empty response from AI");
     }
-  });
-
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    
+    const auditResult = JSON.parse(jsonText);
+    res.json(auditResult);
+  } catch (error: any) {
+    console.error("Audit API Error:", error);
+    res.status(500).json({ error: error.message || "Failed to generate audit report" });
   }
+});
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
-}
-
-startServer();
+// Essa é a linha mágica que faz o Express funcionar na Vercel
+export default app;
