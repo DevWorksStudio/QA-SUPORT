@@ -17,6 +17,7 @@ function parseBase64ToGeminiPart(base64DataUri: string) {
   return { inlineData: { data: matches[2], mimeType: matches[1] } };
 }
 
+// Rota de API isolada
 app.post("/api/audit", async (req, res) => {
   try {
     const { whatsappChat, jiraTicket, whatsappFiles = [], jiraFiles = [] } = req.body;
@@ -34,7 +35,7 @@ app.post("/api/audit", async (req, res) => {
     if (whatsappChat) promptTexto += `--- [CONVERSA DO WHATSAPP] ---\n${whatsappChat}\n\n`;
     if (jiraTicket) promptTexto += `--- [TICKET DO JIRA] ---\n${jiraTicket}\n\n`;
 
-    promptTexto += `Retorne estritamente um JSON:
+    promptTexto += `Retorne estritamente um JSON (sem explicações):
 {
   "dataCrossReference": { "isCompliant": true, "divergencesFound": "..." },
   "technicalQuality": { "isResolved": true, "unansweredQuestions": "...", "observation": "..." },
@@ -52,7 +53,9 @@ app.post("/api/audit", async (req, res) => {
     });
 
     const resultText = response.response.text();
-    res.json(JSON.parse(resultText || "{}"));
+    // Limpeza de possíveis blocos markdown
+    const jsonString = resultText.replace(/```json/g, '').replace(/```/g, '');
+    res.json(JSON.parse(jsonString || "{}"));
     
   } catch (error: any) {
     console.error("Audit API Error:", error);
@@ -60,10 +63,11 @@ app.post("/api/audit", async (req, res) => {
   }
 });
 
-// Servir o front-end (Vite build)
+// Servir o front-end apenas se a rota NÃO começar com /api
 const distPath = path.join(process.cwd(), 'dist');
 app.use(express.static(distPath));
-app.get('*', (req, res) => {
+
+app.get(/^(?!\/api).+/, (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
