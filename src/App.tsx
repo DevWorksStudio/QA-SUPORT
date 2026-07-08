@@ -22,16 +22,16 @@ export default function App() {
   const [whatsappChat, setWhatsappChat] = useState('');
   const [jiraTicket, setJiraTicket] = useState('');
   
-  const [whatsappImages, setWhatsappImages] = useState<string[]>([]);
-  const [jiraImages, setJiraImages] = useState<string[]>([]);
+  const [whatsappFiles, setWhatsappFiles] = useState<string[]>([]);
+  const [jiraFiles, setJiraFiles] = useState<string[]>([]);
   
   const [isAuditing, setIsAuditing] = useState(false);
   const [result, setResult] = useState<AuditResult | null>(null);
   const [error, setError] = useState('');
 
-  const handleMultipleImageUpload = async (files: FileList | null, setter: React.Dispatch<React.SetStateAction<string[]>>) => {
+  const handleMultipleFileUpload = async (files: FileList | null, setter: React.Dispatch<React.SetStateAction<string[]>>) => {
     if (!files) return;
-    const newImages = await Promise.all(
+    const newFiles = await Promise.all(
       Array.from(files).map((file) => {
         return new Promise<string>((resolve) => {
           const reader = new FileReader();
@@ -40,12 +40,14 @@ export default function App() {
         });
       })
     );
-    setter((prev) => [...prev, ...newImages]);
+    setter((prev) => [...prev, ...newFiles]);
   };
 
+  const isPdf = (base64String: string) => base64String.startsWith('data:application/pdf');
+
   const handleAudit = async () => {
-    if ((!whatsappChat.trim() && whatsappImages.length === 0) || (!jiraTicket.trim() && jiraImages.length === 0)) {
-      setError('Por favor, forneça o texto ou print do WhatsApp E também do JIRA.');
+    if ((!whatsappChat.trim() && whatsappFiles.length === 0) || (!jiraTicket.trim() && jiraFiles.length === 0)) {
+      setError('Por favor, forneça o texto ou print/PDF do WhatsApp e o do JIRA.');
       return;
     }
 
@@ -60,8 +62,8 @@ export default function App() {
         body: JSON.stringify({ 
           whatsappChat, 
           jiraTicket,
-          whatsappImages,
-          jiraImages
+          whatsappFiles,
+          jiraFiles
         }),
       });
 
@@ -108,27 +110,34 @@ export default function App() {
                 </label>
                 <label className="cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 text-[11px] font-semibold py-1 px-3 rounded flex items-center gap-1.5 transition-colors">
                   <Upload className="w-3 h-3" />
-                  <span>Anexar Prints ({whatsappImages.length})</span>
+                  <span>Anexar Arquivos ({whatsappFiles.length})</span>
                   <input 
                     type="file" 
-                    accept="image/*"
+                    accept="image/*,application/pdf"
                     multiple
                     className="hidden" 
                     onChange={(e) => {
-                      handleMultipleImageUpload(e.target.files, setWhatsappImages);
+                      handleMultipleFileUpload(e.target.files, setWhatsappFiles);
                       e.target.value = '';
                     }} 
                   />
                 </label>
               </div>
               
-              {whatsappImages.length > 0 && (
+              {whatsappFiles.length > 0 && (
                 <div className="mb-3 flex gap-2 overflow-x-auto pb-2">
-                  {whatsappImages.map((img, idx) => (
-                    <div key={idx} className="relative w-20 h-20 shrink-0 rounded border border-slate-200 overflow-hidden group">
-                      <img src={img} alt={`WhatsApp Preview ${idx + 1}`} className="w-full h-full object-cover" />
+                  {whatsappFiles.map((file, idx) => (
+                    <div key={idx} className="relative w-20 h-20 shrink-0 rounded border border-slate-200 overflow-hidden group bg-slate-100 flex items-center justify-center">
+                      {isPdf(file) ? (
+                        <div className="flex flex-col items-center justify-center text-slate-400">
+                          <FileText className="w-8 h-8" />
+                          <span className="text-[10px] mt-1 font-bold">PDF</span>
+                        </div>
+                      ) : (
+                        <img src={file} alt={`WhatsApp Preview ${idx + 1}`} className="w-full h-full object-cover" />
+                      )}
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                         <button onClick={() => setWhatsappImages(prev => prev.filter((_, i) => i !== idx))} className="bg-white text-slate-800 p-1.5 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors">
+                         <button onClick={() => setWhatsappFiles(prev => prev.filter((_, i) => i !== idx))} className="bg-white text-slate-800 p-1.5 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors">
                            <X className="w-4 h-4" />
                          </button>
                       </div>
@@ -153,27 +162,34 @@ export default function App() {
                 </label>
                 <label className="cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 text-[11px] font-semibold py-1 px-3 rounded flex items-center gap-1.5 transition-colors">
                   <Upload className="w-3 h-3" />
-                  <span>Anexar Prints ({jiraImages.length})</span>
+                  <span>Anexar Arquivos ({jiraFiles.length})</span>
                   <input 
                     type="file" 
-                    accept="image/*"
+                    accept="image/*,application/pdf"
                     multiple
                     className="hidden" 
                     onChange={(e) => {
-                      handleMultipleImageUpload(e.target.files, setJiraImages);
+                      handleMultipleFileUpload(e.target.files, setJiraFiles);
                       e.target.value = '';
                     }} 
                   />
                 </label>
               </div>
 
-              {jiraImages.length > 0 && (
+              {jiraFiles.length > 0 && (
                 <div className="mb-3 flex gap-2 overflow-x-auto pb-2">
-                  {jiraImages.map((img, idx) => (
-                    <div key={idx} className="relative w-20 h-20 shrink-0 rounded border border-slate-200 overflow-hidden group">
-                      <img src={img} alt={`Jira Preview ${idx + 1}`} className="w-full h-full object-cover" />
+                  {jiraFiles.map((file, idx) => (
+                    <div key={idx} className="relative w-20 h-20 shrink-0 rounded border border-slate-200 overflow-hidden group bg-slate-100 flex items-center justify-center">
+                      {isPdf(file) ? (
+                        <div className="flex flex-col items-center justify-center text-slate-400">
+                          <FileText className="w-8 h-8" />
+                          <span className="text-[10px] mt-1 font-bold">PDF</span>
+                        </div>
+                      ) : (
+                        <img src={file} alt={`Jira Preview ${idx + 1}`} className="w-full h-full object-cover" />
+                      )}
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                         <button onClick={() => setJiraImages(prev => prev.filter((_, i) => i !== idx))} className="bg-white text-slate-800 p-1.5 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors">
+                         <button onClick={() => setJiraFiles(prev => prev.filter((_, i) => i !== idx))} className="bg-white text-slate-800 p-1.5 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors">
                            <X className="w-4 h-4" />
                          </button>
                       </div>
