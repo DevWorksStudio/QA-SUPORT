@@ -1,27 +1,51 @@
 import { useState } from 'react';
-import { ClipboardCheck, FileText, MessageSquare, AlertCircle, CheckCircle2, ChevronRight, RefreshCw, Upload, X } from 'lucide-react';
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-// Inicializa o SDK diretamente com a chave da Vercel
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY || "");
+import { ClipboardCheck, FileText, MessageSquare, AlertCircle, CheckCircle2, ChevronRight, RefreshCw, Upload, Image as ImageIcon, X } from 'lucide-react';
 
 interface AuditResult {
-  dataCrossReference: { isCompliant: boolean; divergencesFound: string; };
-  technicalQuality: { isResolved: boolean; unansweredQuestions: string; observation: string; };
-  softSkills: { score: number; postureAnalysis: string; };
+  dataCrossReference: {
+    isCompliant: boolean;
+    divergencesFound: string;
+  };
+  technicalQuality: {
+    isResolved: boolean;
+    unansweredQuestions: string;
+    observation: string;
+  };
+  softSkills: {
+    score: number;
+    postureAnalysis: string;
+  };
   overallFeedback: string;
 }
 
 export default function App() {
   const [whatsappChat, setWhatsappChat] = useState('');
   const [jiraTicket, setJiraTicket] = useState('');
+  const [whatsappFiles, setWhatsappFiles] = useState<string[]>([]);
+  const [jiraFiles, setJiraFiles] = useState<string[]>([]);
   const [isAuditing, setIsAuditing] = useState(false);
   const [result, setResult] = useState<AuditResult | null>(null);
   const [error, setError] = useState('');
 
+  const handleMultipleFileUpload = async (files: FileList | null, setter: React.Dispatch<React.SetStateAction<string[]>>) => {
+    if (!files) return;
+    const newFiles = await Promise.all(
+      Array.from(files).map((file) => {
+        return new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+      })
+    );
+    setter((prev) => [...prev, ...newFiles]);
+  };
+
+  const isPdf = (base64String: string) => base64String.startsWith('data:application/pdf');
+
   const handleAudit = async () => {
-    if (!whatsappChat.trim() || !jiraTicket.trim()) {
-      setError('Por favor, preencha os dados do WhatsApp e do JIRA.');
+    if ((!whatsappChat.trim() && whatsappFiles.length === 0) || (!jiraTicket.trim() && jiraFiles.length === 0)) {
+      setError('Por favor, forneça o texto ou print/PDF do WhatsApp e o do JIRA.');
       return;
     }
 
@@ -30,59 +54,105 @@ export default function App() {
     setResult(null);
 
     try {
-      // Usa o modelo flash que é rápido e eficiente
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const response = await fetch('/api/audit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          whatsappChat, 
+          jiraTicket,
+          whatsappFiles,
+          jiraFiles
+        }),
+      });
 
-      const prompt = `Atue como um Especialista Sênior de QA. Audite o atendimento cruzando a conversa com o ticket.
-      WHATSAPP: ${whatsappChat}
-      JIRA: ${jiraTicket}
+      const responseText = await response.text();
       
-      Retorne estritamente um JSON (sem texto antes ou depois):
-      {
-        "dataCrossReference": { "isCompliant": true, "divergencesFound": "..." },
-        "technicalQuality": { "isResolved": true, "unansweredQuestions": "...", "observation": "..." },
-        "softSkills": { "score": 0, "postureAnalysis": "..." },
-        "overallFeedback": "..."
-      }`;
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        throw new Error("Erro no servidor: A resposta não é um formato JSON válido.");
+      }
 
-      const result = await model.generateContent(prompt);
-      const responseText = result.response.text();
-      // Limpeza básica caso a IA retorne markdown
-      const jsonString = responseText.replace(/```json/g, '').replace(/```/g, '');
-      
-      setResult(JSON.parse(jsonString));
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao realizar auditoria');
+      }
+
+      setResult(data);
     } catch (err: any) {
-      console.error(err);
-      setError('Erro ao conectar com Gemini: ' + err.message);
+      setError(err.message || 'Erro inesperado de conexão.');
     } finally {
       setIsAuditing(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-800 font-sans p-8">
-      <header className="max-w-4xl mx-auto bg-slate-900 text-white p-6 rounded-t-lg flex justify-between items-center">
-        <h1 className="font-bold flex items-center gap-2"><ClipboardCheck className="text-blue-400" /> QA Auditor Direct</h1>
+    <div className="min-h-screen bg-slate-100 text-slate-800 font-sans flex flex-col">
+      <header className="bg-slate-900 text-white px-6 h-16 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-3">
+          <ClipboardCheck className="w-5 h-5 text-blue-400" />
+          <h1 className="text-[18px] font-semibold text-white">QA Auditor</h1>
+        </div>
       </header>
 
-      <div className="max-w-4xl mx-auto bg-white p-6 rounded-b-lg shadow-sm grid grid-cols-1 md:grid-cols-2 gap-4">
-        <textarea className="w-full h-48 p-3 border rounded bg-slate-50" placeholder="Log WhatsApp..." value={whatsappChat} onChange={e => setWhatsappChat(e.target.value)} />
-        <textarea className="w-full h-48 p-3 border rounded bg-slate-50" placeholder="Ticket JIRA..." value={jiraTicket} onChange={e => setJiraTicket(e.target.value)} />
-        
-        {error && <div className="col-span-2 p-3 bg-red-100 text-red-700 rounded text-sm">{error}</div>}
-        
-        <button onClick={handleAudit} disabled={isAuditing} className="col-span-2 bg-slate-900 text-white py-3 rounded font-bold hover:bg-slate-800 disabled:opacity-50">
-          {isAuditing ? <RefreshCw className="animate-spin mx-auto" /> : "Gerar Auditoria QA"}
-        </button>
-      </div>
+      <div className="flex-1 w-full max-w-7xl mx-auto p-4 md:p-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          
+          <div className="space-y-4 bg-white rounded-lg border border-slate-200 p-4">
+            {/* WhatsApp Section */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-2">
+                  <MessageSquare className="w-3 h-3 text-emerald-500" /> Transcrição do WhatsApp
+                </label>
+                <label className="cursor-pointer bg-slate-50 border border-slate-200 py-1 px-3 rounded text-[11px] font-semibold flex items-center gap-1.5">
+                  <Upload className="w-3 h-3" /> Anexar ({whatsappFiles.length})
+                  <input type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => handleMultipleFileUpload(e.target.files, setWhatsappFiles)} />
+                </label>
+              </div>
+              <textarea value={whatsappChat} onChange={(e) => setWhatsappChat(e.target.value)} className="w-full h-48 p-3 rounded border bg-slate-50 focus:ring-1 focus:ring-blue-500 text-[13px] resize-none" placeholder="Cole o log do WhatsApp..." />
+            </div>
 
-      {result && (
-        <div className="max-w-4xl mx-auto mt-6 bg-white p-6 rounded shadow-sm space-y-4">
-          <h2 className="font-bold text-lg border-b pb-2">Resultado da Auditoria</h2>
-          <p><strong>Divergências:</strong> {result.dataCrossReference.divergencesFound}</p>
-          <p><strong>Feedback:</strong> {result.overallFeedback}</p>
+            {/* JIRA Section */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-2">
+                  <FileText className="w-3 h-3 text-blue-500" /> Ticket do JIRA
+                </label>
+                <label className="cursor-pointer bg-slate-50 border border-slate-200 py-1 px-3 rounded text-[11px] font-semibold flex items-center gap-1.5">
+                  <Upload className="w-3 h-3" /> Anexar ({jiraFiles.length})
+                  <input type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => handleMultipleFileUpload(e.target.files, setJiraFiles)} />
+                </label>
+              </div>
+              <textarea value={jiraTicket} onChange={(e) => setJiraTicket(e.target.value)} className="w-full h-48 p-3 rounded border bg-slate-50 focus:ring-1 focus:ring-blue-500 text-[13px] resize-none" placeholder="Cole o ticket do JIRA..." />
+            </div>
+
+            {error && <div className="p-4 bg-red-50 text-red-700 text-sm rounded flex items-center gap-2"><AlertCircle className="w-4 h-4" /> {error}</div>}
+
+            <button onClick={handleAudit} disabled={isAuditing} className="w-full bg-slate-900 text-white py-3 rounded font-bold flex items-center justify-center gap-2">
+              {isAuditing ? <RefreshCw className="animate-spin" /> : <>Gerar Auditoria <ChevronRight /></>}
+            </button>
+          </div>
+
+          {/* Results Display */}
+          <div className="bg-slate-50 rounded-lg p-6 border border-slate-200">
+            {result ? (
+              <div className="space-y-4">
+                <div className={`p-4 rounded border-l-4 ${result.dataCrossReference.isCompliant ? 'border-emerald-500' : 'border-red-500'}`}>
+                  <h2 className="font-bold">Cruzamento de Dados</h2>
+                  <p className="text-sm">{result.dataCrossReference.divergencesFound}</p>
+                </div>
+                <div className="p-4 bg-white rounded border">
+                  <h2 className="font-bold">Feedback Final</h2>
+                  <p className="text-sm">{result.overallFeedback}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center text-slate-400 py-20">Aguardando análise...</div>
+            )}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
