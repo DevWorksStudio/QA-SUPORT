@@ -20,17 +20,18 @@ interface AuditResult {
 
 export default function App() {
   const [whatsappChat, setWhatsappChat] = useState('');
-  const [jiraTicketId, setJiraTicketId] = useState('');
+  const [jiraTicket, setJiraTicket] = useState('');
   
-  const [whatsappFiles, setWhatsappFiles] = useState<string[]>([]);
+  const [whatsappImages, setWhatsappImages] = useState<string[]>([]);
+  const [jiraImages, setJiraImages] = useState<string[]>([]);
   
   const [isAuditing, setIsAuditing] = useState(false);
   const [result, setResult] = useState<AuditResult | null>(null);
   const [error, setError] = useState('');
 
-  const handleMultipleFileUpload = async (files: FileList | null, setter: React.Dispatch<React.SetStateAction<string[]>>) => {
+  const handleMultipleImageUpload = async (files: FileList | null, setter: React.Dispatch<React.SetStateAction<string[]>>) => {
     if (!files) return;
-    const newFiles = await Promise.all(
+    const newImages = await Promise.all(
       Array.from(files).map((file) => {
         return new Promise<string>((resolve) => {
           const reader = new FileReader();
@@ -39,14 +40,12 @@ export default function App() {
         });
       })
     );
-    setter((prev) => [...prev, ...newFiles]);
+    setter((prev) => [...prev, ...newImages]);
   };
 
-  const isPdf = (base64String: string) => base64String.startsWith('data:application/pdf');
-
   const handleAudit = async () => {
-    if ((!whatsappChat.trim() && whatsappFiles.length === 0) || !jiraTicketId.trim()) {
-      setError('Por favor, forneça o texto ou print/PDF do WhatsApp e o Número do Ticket do JIRA.');
+    if ((!whatsappChat.trim() && whatsappImages.length === 0) || (!jiraTicket.trim() && jiraImages.length === 0)) {
+      setError('Por favor, forneça o texto ou print do WhatsApp E também do JIRA.');
       return;
     }
 
@@ -60,8 +59,9 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           whatsappChat, 
-          jiraTicketId,
-          whatsappFiles
+          jiraTicket,
+          whatsappImages,
+          jiraImages
         }),
       });
 
@@ -108,34 +108,27 @@ export default function App() {
                 </label>
                 <label className="cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 text-[11px] font-semibold py-1 px-3 rounded flex items-center gap-1.5 transition-colors">
                   <Upload className="w-3 h-3" />
-                  <span>Anexar Arquivos ({whatsappFiles.length})</span>
+                  <span>Anexar Prints ({whatsappImages.length})</span>
                   <input 
                     type="file" 
-                    accept="image/*,application/pdf"
+                    accept="image/*"
                     multiple
                     className="hidden" 
                     onChange={(e) => {
-                      handleMultipleFileUpload(e.target.files, setWhatsappFiles);
+                      handleMultipleImageUpload(e.target.files, setWhatsappImages);
                       e.target.value = '';
                     }} 
                   />
                 </label>
               </div>
               
-              {whatsappFiles.length > 0 && (
+              {whatsappImages.length > 0 && (
                 <div className="mb-3 flex gap-2 overflow-x-auto pb-2">
-                  {whatsappFiles.map((file, idx) => (
-                    <div key={idx} className="relative w-20 h-20 shrink-0 rounded border border-slate-200 overflow-hidden group bg-slate-100 flex items-center justify-center">
-                      {isPdf(file) ? (
-                        <div className="flex flex-col items-center justify-center text-slate-400">
-                          <FileText className="w-8 h-8" />
-                          <span className="text-[10px] mt-1 font-bold">PDF</span>
-                        </div>
-                      ) : (
-                        <img src={file} alt={`WhatsApp Preview ${idx + 1}`} className="w-full h-full object-cover" />
-                      )}
+                  {whatsappImages.map((img, idx) => (
+                    <div key={idx} className="relative w-20 h-20 shrink-0 rounded border border-slate-200 overflow-hidden group">
+                      <img src={img} alt={`WhatsApp Preview ${idx + 1}`} className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                         <button onClick={() => setWhatsappFiles(prev => prev.filter((_, i) => i !== idx))} className="bg-white text-slate-800 p-1.5 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors">
+                         <button onClick={() => setWhatsappImages(prev => prev.filter((_, i) => i !== idx))} className="bg-white text-slate-800 p-1.5 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors">
                            <X className="w-4 h-4" />
                          </button>
                       </div>
@@ -156,16 +149,44 @@ export default function App() {
               <div className="flex items-center justify-between mb-2">
                 <label className="flex items-center space-x-2 text-[11px] font-bold text-slate-500 uppercase">
                   <FileText className="w-3 h-3 text-blue-500" />
-                  <span>ID do Ticket do JIRA</span>
+                  <span>Ticket do JIRA</span>
+                </label>
+                <label className="cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 text-[11px] font-semibold py-1 px-3 rounded flex items-center gap-1.5 transition-colors">
+                  <Upload className="w-3 h-3" />
+                  <span>Anexar Prints ({jiraImages.length})</span>
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    multiple
+                    className="hidden" 
+                    onChange={(e) => {
+                      handleMultipleImageUpload(e.target.files, setJiraImages);
+                      e.target.value = '';
+                    }} 
+                  />
                 </label>
               </div>
 
-              <input
-                type="text"
-                value={jiraTicketId}
-                onChange={(e) => setJiraTicketId(e.target.value)}
-                placeholder="Ex: MXPED-91680"
-                className="w-full p-3 rounded border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all text-[13px] font-sans text-slate-800"
+              {jiraImages.length > 0 && (
+                <div className="mb-3 flex gap-2 overflow-x-auto pb-2">
+                  {jiraImages.map((img, idx) => (
+                    <div key={idx} className="relative w-20 h-20 shrink-0 rounded border border-slate-200 overflow-hidden group">
+                      <img src={img} alt={`Jira Preview ${idx + 1}`} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                         <button onClick={() => setJiraImages(prev => prev.filter((_, i) => i !== idx))} className="bg-white text-slate-800 p-1.5 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors">
+                           <X className="w-4 h-4" />
+                         </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <textarea
+                value={jiraTicket}
+                onChange={(e) => setJiraTicket(e.target.value)}
+                placeholder="Cole aqui os dados do chamado (Resumo, Descrição, Solução)..."
+                className="w-full h-48 p-3 rounded border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none text-[13px] font-sans text-slate-800"
               />
             </div>
 
