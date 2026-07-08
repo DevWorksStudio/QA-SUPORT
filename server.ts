@@ -18,39 +18,14 @@ function parseBase64ToGeminiPart(base64DataUri: string) {
 
 app.post("/api/audit", async (req, res) => {
   try {
-    const { whatsappChat, jiraTicketId, whatsappFiles = [] } = req.body;
+    const { whatsappChat, jiraTicket, whatsappFiles = [], jiraFiles = [] } = req.body;
 
     if (!whatsappChat && whatsappFiles.length === 0) {
       return res.status(400).json({ error: "Forneça o texto ou os arquivos/prints do WhatsApp." });
     }
-    if (!jiraTicketId || jiraTicketId.trim() === '') {
-      return res.status(400).json({ error: "Forneça o número do ticket do JIRA." });
+    if (!jiraTicket && jiraFiles.length === 0) {
+      return res.status(400).json({ error: "Forneça o texto ou os arquivos/prints do JIRA." });
     }
-
-    const JIRA_BASE_URL = process.env.JIRA_BASE_URL;
-    const JIRA_USERNAME = process.env.JIRA_USERNAME;
-    const JIRA_PASSWORD = process.env.JIRA_PASSWORD;
-
-    if (!JIRA_BASE_URL || !JIRA_USERNAME || !JIRA_PASSWORD) {
-        return res.status(500).json({ error: "Configurações de autenticação do JIRA ausentes no servidor." });
-    }
-
-    const token = Buffer.from(`${JIRA_USERNAME}:${JIRA_PASSWORD}`, "utf8").toString("base64");
-
-    const jiraResponse = await fetch(`${JIRA_BASE_URL}/rest/api/2/issue/${jiraTicketId}`, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Basic ${token}`
-      }
-    });
-
-    if (!jiraResponse.ok) {
-        return res.status(jiraResponse.status).json({ error: `Erro ao buscar ticket no JIRA: ${jiraResponse.statusText}` });
-    }
-
-    const jiraData = await jiraResponse.json();
-    const jiraTicketText = `Título: ${jiraData.fields?.summary || 'N/A'}\nDescrição: ${jiraData.fields?.description || 'N/A'}`;
 
     let promptTexto = `Atue como um Especialista Sênior de QA e Auditoria de Suporte. Audite o atendimento cruzando a conversa com o ticket.\n\n`;
     const contents: any[] = [];
@@ -58,7 +33,8 @@ app.post("/api/audit", async (req, res) => {
     if (whatsappChat) promptTexto += `--- [CONVERSA DO WHATSAPP - TEXTO] ---\n${whatsappChat}\n\n`;
     if (whatsappFiles.length > 0) promptTexto += `--- [CONVERSA DO WHATSAPP - ARQUIVOS (PDF/IMAGEM)] ---\nOs arquivos da conversa (${whatsappFiles.length} anexos) estão incluídos na requisição.\n\n`;
     
-    promptTexto += `--- [TICKET DO JIRA - TEXTO (Gerado via API)] ---\nTicket ID: ${jiraTicketId}\n${jiraTicketText}\n\n`;
+    if (jiraTicket) promptTexto += `--- [TICKET DO JIRA - TEXTO] ---\n${jiraTicket}\n\n`;
+    if (jiraFiles.length > 0) promptTexto += `--- [TICKET DO JIRA - ARQUIVOS (PDF/IMAGEM)] ---\nOs arquivos do ticket (${jiraFiles.length} anexos) estão incluídos na requisição.\n\n`;
 
     promptTexto += `Retorne estritamente um JSON com:
 {
@@ -71,6 +47,7 @@ app.post("/api/audit", async (req, res) => {
     contents.push(promptTexto);
     
     for (const file of whatsappFiles) contents.push(parseBase64ToGeminiPart(file));
+    for (const file of jiraFiles) contents.push(parseBase64ToGeminiPart(file));
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
