@@ -1,5 +1,18 @@
 import { useState } from 'react';
-import { ClipboardCheck, FileText, MessageSquare, AlertCircle, CheckCircle2, ChevronRight, RefreshCw, Upload, Image as ImageIcon, X } from 'lucide-react';
+import { ClipboardCheck, FileText, MessageSquare, AlertCircle, CheckCircle2, ChevronRight, RefreshCw, Upload, X } from 'lucide-react';
+import { GoogleGenAI } from "@google/genai";
+
+// 1. Inicializa a IA direto no Frontend com a chave do Vite
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY || "" });
+
+// 2. Formata os arquivos para a IA
+function parseBase64ToGeminiPart(base64DataUri: string) {
+  const matches = base64DataUri.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+  if (!matches || matches.length !== 3) {
+    return { inlineData: { data: base64DataUri, mimeType: "image/png" } };
+  }
+  return { inlineData: { data: matches[2], mimeType: matches[1] } };
+}
 
 interface AuditResult {
   dataCrossReference: {
@@ -45,6 +58,7 @@ export default function App() {
 
   const isPdf = (base64String: string) => base64String.startsWith('data:application/pdf');
 
+  // 3. A nova função que fala direto com o Gemini, sem servidor
   const handleAudit = async () => {
     if ((!whatsappChat.trim() && whatsappFiles.length === 0) || (!jiraTicket.trim() && jiraFiles.length === 0)) {
       setError('Por favor, forneça o texto ou print/PDF do WhatsApp e o do JIRA.');
@@ -56,25 +70,41 @@ export default function App() {
     setResult(null);
 
     try {
-      const response = await fetch('/api/audit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          whatsappChat, 
-          jiraTicket,
-          whatsappFiles,
-          jiraFiles
-        }),
+      let promptTexto = `Atue como um Especialista Sênior de QA e Auditoria de Suporte. Audite o atendimento cruzando a conversa com o ticket.\n\n`;
+      const contents: any[] = [];
+
+      if (whatsappChat) promptTexto += `--- [CONVERSA DO WHATSAPP - TEXTO] ---\n${whatsappChat}\n\n`;
+      if (whatsappFiles.length > 0) promptTexto += `--- [CONVERSA DO WHATSAPP - ARQUIVOS] ---\nArquivos incluídos (${whatsappFiles.length}).\n\n`;
+      
+      if (jiraTicket) promptTexto += `--- [TICKET DO JIRA - TEXTO] ---\n${jiraTicket}\n\n`;
+      if (jiraFiles.length > 0) promptTexto += `--- [TICKET DO JIRA - ARQUIVOS] ---\nArquivos incluídos (${jiraFiles.length}).\n\n`;
+
+      promptTexto += `Retorne estritamente um JSON com:
+{
+  "dataCrossReference": { "isCompliant": true, "divergencesFound": "..." },
+  "technicalQuality": { "isResolved": true, "unansweredQuestions": "...", "observation": "..." },
+  "softSkills": { "score": 0, "postureAnalysis": "..." },
+  "overallFeedback": "..."
+}`;
+
+      contents.push(promptTexto);
+      for (const file of whatsappFiles) contents.push(parseBase64ToGeminiPart(file));
+      for (const file of jiraFiles) contents.push(parseBase64ToGeminiPart(file));
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash", // Mesmo modelo que estava no server.ts
+        contents: contents,
+        config: { responseMimeType: "application/json", temperature: 0.2 }
       });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Erro ao realizar auditoria');
-      }
+      // Limpa a resposta e converte o JSON
+      const resultadoTexto = response.text || "{}";
+      const jsonLimpo = resultadoTexto.replace(/```json/g, '').replace(/```/g, '');
+      const data = JSON.parse(jsonLimpo);
 
-      const data = await response.json();
       setResult(data);
     } catch (err: any) {
+      console.error("Erro na API do Gemini:", err);
       setError(err.message || 'Erro inesperado de conexão. Tente novamente.');
     } finally {
       setIsAuditing(false);
