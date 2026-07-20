@@ -92,7 +92,7 @@ export default function App() {
       for (const file of jiraFiles) contents.push(parseBase64ToGeminiPart(file));
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash", // Mesmo modelo que estava no server.ts
+        model: "gemini-3.1-flash-lite",
         contents: contents,
         config: { responseMimeType: "application/json", temperature: 0.2 }
       });
